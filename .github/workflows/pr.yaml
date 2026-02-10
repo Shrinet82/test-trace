@@ -470,12 +470,15 @@ jobs:
       - name: "Setup Mainline Kernel"
         run: |
           chmod +x ./scripts/setup-mainline-kernel.sh
-          ./scripts/setup-mainline-kernel.sh "${{ matrix.kernel_version }}"
+          ./scripts/setup-mainline-kernel.sh "${{ matrix.kernel_version }}" --arch "${{ matrix.arch }}"
 
       - name: "Install Tooling & Dependencies"
         run: |
           ./scripts/installation/install-deps-ubuntu.sh
           ./scripts/installation/install-clang.sh
+          # Install QEMU for multi-arch support
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-system-arm
 
       - name: "Build Tracee"
         run: |
@@ -485,7 +488,7 @@ jobs:
         run: |
           chmod +x ./tests/e2e-kernel-test-qemu.sh
           # Pass required env vars? The script handles it.
-          ./tests/e2e-kernel-test-qemu.sh "${{ env.KERNEL_RELEASE }}"
+          ./tests/e2e-kernel-test-qemu.sh "${{ matrix.kernel_version }}" "${{ matrix.arch }}"
 
       - name: Upload Logs
         if: failure()
