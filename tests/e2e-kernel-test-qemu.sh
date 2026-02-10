@@ -84,6 +84,14 @@ if [[ ! -f "$KERNEL_IMG" ]]; then
     exit 1
 fi
 
+# /boot is root-owned — CI runner user cannot read it directly.
+# Copy the kernel to the workspace so QEMU (running as runner user) can access it.
+LOCAL_KERNEL="./vmlinuz-$KERNEL_RELEASE"
+echo "Copying kernel to workspace for QEMU access..."
+sudo cp "$KERNEL_IMG" "$LOCAL_KERNEL"
+sudo chmod +r "$LOCAL_KERNEL"
+KERNEL_IMG="$LOCAL_KERNEL"
+
 # Prepare test command
 CMD="$(pwd)/tests/e2e-kernel-test-qemu-exec.sh"
 chmod +x "$CMD"
