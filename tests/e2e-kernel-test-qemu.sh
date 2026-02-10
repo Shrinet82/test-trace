@@ -22,27 +22,41 @@ fi
 
 echo "Configuration: Kernel=$KERNEL_VERSION, Arch=$ARCH, QEMU_ARCH=$QEMU_ARCH"
 
-# Install virtme from upstream git (PyPI version 0.0.1 is too old)
+# Install virtme from upstream git and patch QEMU compatibility issues
 install_virtme() {
     if command -v virtme-run >/dev/null 2>&1; then
         echo "virtme-run already available"
-        return
+    else
+        echo "Installing virtme from upstream git..."
+        pip3 install git+https://github.com/amluto/virtme.git
     fi
-
-    echo "Installing virtme from upstream git..."
-    pip3 install git+https://github.com/amluto/virtme.git
 
     # Patch: QEMU 9.x (Ubuntu 24.04) removed the legacy '-watchdog' CLI option.
-    # virtme v0.1.1 still emits '-watchdog i6300esb' which causes an error.
-    # We patch it out from virtme's source after installation.
-    VIRTME_RUN_PY=$(python3 -c "import virtme.commands.run as r; print(r.__file__)" 2>/dev/null || true)
-    if [[ -n "$VIRTME_RUN_PY" && -f "$VIRTME_RUN_PY" ]]; then
-        echo "Patching virtme to remove deprecated -watchdog flag..."
-        sed -i "/-watchdog/d" "$VIRTME_RUN_PY"
-        echo "Patched: $VIRTME_RUN_PY"
+    # virtme still emits '-watchdog i6300esb'. We must remove ALL occurrences.
+    VIRTME_PKG_DIR=$(python3 -c "import virtme; import os; print(os.path.dirname(virtme.__file__))" 2>/dev/null || true)
+    if [[ -n "$VIRTME_PKG_DIR" && -d "$VIRTME_PKG_DIR" ]]; then
+        echo "Virtme package dir: $VIRTME_PKG_DIR"
+        echo "Searching for ALL -watchdog references..."
+        # Find every file that mentions watchdog
+        WATCHDOG_FILES=$(grep -rl "watchdog" "$VIRTME_PKG_DIR" 2>/dev/null || true)
+        if [[ -n "$WATCHDOG_FILES" ]]; then
+            echo "Found watchdog references in:"
+            echo "$WATCHDOG_FILES"
+            for f in $WATCHDOG_FILES; do
+                echo "  Patching: $f"
+                # Remove any line containing 'watchdog' (covers all variants)
+                sed -i '/watchdog/d' "$f"
+            done
+            echo "All watchdog references patched."
+        else
+            echo "No watchdog references found (already clean)."
+        fi
     else
-        echo "WARNING: Could not locate virtme run.py to patch -watchdog"
+        echo "WARNING: Could not locate virtme package directory"
     fi
+
+    # Verify the patch by showing what QEMU command would be generated
+    echo "Verifying patch with --show-command..."
 }
 
 install_virtme
@@ -74,15 +88,19 @@ fi
 CMD="$(pwd)/tests/e2e-kernel-test-qemu-exec.sh"
 chmod +x "$CMD"
 
+# First, show the QEMU command for debugging (dry run)
+echo "=== DRY RUN (showing QEMU command) ==="
+virtme-run \
+    --kimg "$KERNEL_IMG" \
+    --memory 4G \
+    --cpus 2 \
+    --show-command || echo "(show-command returned non-zero, continuing anyway)"
+
+echo "=== END DRY RUN ==="
+
 echo "Launching virtme-run with kernel: $KERNEL_IMG"
 
 # Build virtme-run command
-# --kimg: path to kernel image
-# --rw: mount host filesystem read-write
-# --pwd: start in current directory
-# --memory: VM RAM
-# --cpus: VM vCPUs
-# --script-exec: run binary inside VM then exit
 VIRTME_ARGS=(
     virtme-run
     --kimg "$KERNEL_IMG"
