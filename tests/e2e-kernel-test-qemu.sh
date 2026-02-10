@@ -109,7 +109,6 @@ fi
 # Passing a command usually makes it exit after command.
 
 $VNG_CMD \
-    --kernel "$KERNEL_IMG" \
-    --initrd "$INITRD_IMG" \
+    --kimg "$KERNEL_IMG" \
     -- \
     "$CMD"
