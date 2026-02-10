@@ -68,25 +68,33 @@ chmod +x "$CMD"
 
 echo "Launching virtme-run..."
 
-# virtme-run arguments:
-# --kimg: Kernel image
-# --rw: Enable read/write overlay
-# --pwd: Mount current directory
-# --qemu-opts: Pass flags to QEMU (memory, cpus)
-# --script-exec: Run command immediately
+# virtme-run (upstream v0.1.1) arguments:
+# --kimg: Kernel image path
+# --rw: Enable read/write overlay on host filesystem
+# --pwd: Start in current working directory inside VM
+# --memory: VM memory (native flag, avoids --qemu-opts greedy parsing)
+# --cpus: VM CPU count (native flag)
+# --script-exec: Run a binary inside the VM then exit
+# --arch: Guest architecture
 
-# Construct virtme command
-VIRTME_CMD="virtme-run --rw --pwd --qemu-opts -m 4G -smp 2"
+# Build the virtme-run command using native flags only.
+# IMPORTANT: Do NOT use --qemu-opts because it uses nargs='...'
+# and swallows all subsequent arguments including --kimg.
+VIRTME_ARGS=(
+    virtme-run
+    --kimg "$KERNEL_IMG"
+    --rw
+    --pwd
+    --memory 4G
+    --cpus 2
+    --script-exec "$CMD"
+)
 
-# Handle Architecture
+# Handle cross-architecture emulation
 if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     echo "Cross-architecture emulation detected ($QEMU_ARCH on $(uname -m))"
-    # virtme-run defaults to host arch.
-    # We rely on qemu-system-$QEMU_ARCH being used or detected.
-    # virtme allows specifying qemu binary via --qemu-bin
-    VIRTME_CMD="$VIRTME_CMD --qemu-bin $QEMU_BIN"
+    VIRTME_ARGS+=(--arch "$QEMU_ARCH")
 fi
 
-$VIRTME_CMD \
-    --kimg "$KERNEL_IMG" \
-    --script-exec "$CMD"
+echo "Running: ${VIRTME_ARGS[*]}"
+"${VIRTME_ARGS[@]}"
