@@ -45,12 +45,14 @@ jobs:
       - name: "Setup Mainline Kernel"
         run: |
           chmod +x ./scripts/setup-mainline-kernel.sh
-          ./scripts/setup-mainline-kernel.sh "${{ matrix.kernel_version }}" --arch "${{ matrix.arch }}"
+          # Run with sudo to install kernel packages
+          sudo ./scripts/setup-mainline-kernel.sh "${{ matrix.kernel_version }}" --arch "${{ matrix.arch }}"
 
       - name: "Install Tooling & Dependencies"
         run: |
-          ./scripts/installation/install-deps-ubuntu.sh
-          ./scripts/installation/install-clang.sh
+          # Scripts require sudo for apt-get actions
+          sudo ./scripts/installation/install-deps-ubuntu.sh
+          sudo ./scripts/installation/install-clang.sh
           # Install QEMU for multi-arch support
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-system-arm qemu-user-static
