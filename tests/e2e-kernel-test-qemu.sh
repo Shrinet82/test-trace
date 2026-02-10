@@ -29,8 +29,9 @@ echo "Configuration: Kernel=$KERNEL_VERSION, Arch=$ARCH, QEMU=$QEMU_BIN"
 if ! command -v virtme-run >/dev/null; then
     echo "Using system virtme or installing..."
     if ! pip3 show virtme >/dev/null; then
-         echo "virtme not found. Installing..."
-         pip3 install virtme
+         echo "virtme not found. Installing from upstream..."
+         # PyPI virtme is ancient (0.0.1). Install from git for modern features.
+         pip3 install git+https://github.com/amluto/virtme.git
     fi
 fi
 
@@ -72,6 +73,7 @@ echo "Launching virtme-run..."
 # --rw: Enable read/write overlay
 # --pwd: Mount current directory
 # --qemu-opts: Pass flags to QEMU (memory, cpus)
+# --script-exec: Run command immediately
 
 # Construct virtme command
 VIRTME_CMD="virtme-run --rw --pwd --qemu-opts -m 4G -smp 2"
@@ -87,5 +89,4 @@ fi
 
 $VIRTME_CMD \
     --kimg "$KERNEL_IMG" \
-    -- \
-    "$CMD"
+    --script-exec "$CMD"
