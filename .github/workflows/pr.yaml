@@ -1,15 +1,9 @@
 #
 # When a PR is opened or updated: Run Tracee Tests
 #
-name: PR
+name: PR-Test-Fork-Branch
 on:
-  workflow_dispatch:
-    inputs:
-      tracee_ref:
-        description: "Tracee ref to checkout"
-        required: true
-        default: "main"
-        type: string
+  workflow_dispatch: {}
 
   pull_request:
     branches:
