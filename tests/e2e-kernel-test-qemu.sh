@@ -41,6 +41,9 @@ install_virtme_ng() {
         exit 1
     fi
     echo "virtme-ng installed: $(vng --version 2>&1 || true)"
+
+    # Ensure virtme-ng cache directory exists (fixes QEMU mount error)
+    mkdir -p "$HOME/.cache/virtme-ng"
 }
 
 install_virtme_ng
