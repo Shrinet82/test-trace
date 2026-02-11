@@ -108,9 +108,12 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     if [[ ! -f "$BUSYBOX_BIN" ]]; then
         echo "Downloading static busybox for aarch64..."
         mkdir -p "$BUSYBOX_DIR"
-        # URL for busybox-static arm64 deb from Debian (stable)
-        BUSYBOX_URL="http://ftp.de.debian.org/debian/pool/main/b/busybox/busybox-static_1.36.1-3+b1_arm64.deb"
-        wget -q -O busybox.deb "$BUSYBOX_URL" || wget -q -O busybox.deb "http://ftp.de.debian.org/debian/pool/main/b/busybox/busybox-static_1.35.0-4+b3_arm64.deb"
+        # URL for busybox-static arm64 deb from Debian Sid (valid as of 2026-02-11)
+        BUSYBOX_URL="http://ftp.de.debian.org/debian/pool/main/b/busybox/busybox-static_1.37.0-10_arm64.deb"
+        if ! wget -q -O busybox.deb "$BUSYBOX_URL"; then
+             # Fallback to older version if Sid moves
+             wget -q -O busybox.deb "http://ftp.de.debian.org/debian/pool/main/b/busybox/busybox-static_1.35.0-4+b7_arm64.deb"
+        fi
         
         # Extract
         dpkg-deb -x busybox.deb "$BUSYBOX_DIR/extracted"
