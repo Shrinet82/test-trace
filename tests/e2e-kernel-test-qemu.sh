@@ -77,49 +77,80 @@ sudo chmod +r "$LOCAL_KERNEL"
 
 echo "Kernel image ready at: $LOCAL_KERNEL"
 
-# Verify modules are available
-MODULES_DIR="/lib/modules/$KERNEL_RELEASE"
-if [[ -d "$MODULES_DIR" ]]; then
-    echo "Kernel modules found: $MODULES_DIR"
-else
-    echo "WARNING: Kernel modules directory not found: $MODULES_DIR"
-    echo "Available modules:"
-    ls /lib/modules/ 2>/dev/null || echo "  (none)"
-fi
+# Make /boot/vmlinuz readable so vng can find it by release name
+sudo chmod +r "$KERNEL_IMG" 2>/dev/null || true
 
 # Prepare test command
 CMD="$(pwd)/tests/e2e-kernel-test-qemu-exec.sh"
 chmod +x "$CMD"
 
-echo "Launching virtme-ng (vng) with kernel release: $KERNEL_RELEASE"
-
-# Use "vng -r <kernel-release>" which tells virtme-ng to use the installed
-# kernel at /boot/vmlinuz-<release> with modules at /lib/modules/<release>.
-# We've already copied vmlinuz to be readable, but vng -r with the release
-# name should find both the kernel and its modules automatically.
-#
-# However, since the kernel in /boot might not be readable by runner user,
-# we also try passing the local copy as a path. virtme-ng handles both:
-#   vng -r 6.11.0-061100-generic  (by release name)
-#   vng -r ./vmlinuz-...          (by path)
-
-# Make /boot/vmlinuz readable so vng can find it by release name
-sudo chmod +r "$KERNEL_IMG" 2>/dev/null || true
-
+# Build vng command
 VNG_ARGS=(
     vng
     -r "$KERNEL_RELEASE"
     --verbose
     --memory 4G
     --cpus 2
-    --exec "$CMD"
 )
 
 # For cross-architecture emulation
 if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     echo "Cross-architecture emulation: $QEMU_ARCH on $(uname -m)"
     VNG_ARGS+=(--arch "$QEMU_ARCH")
+
+    # For cross-arch, virtme-ng cannot use the host rootfs.
+    # We must provide an architecture-compatible rootfs.
+    # We'll use Ubuntu Base 24.04 (Noble) for arm64.
+
+    ROOTFS_DIR="$(pwd)/rootfs-aarch64"
+    if [[ ! -d "$ROOTFS_DIR" ]]; then
+        echo "Downloading Ubuntu Base aarch64 rootfs..."
+        # URL for Ubuntu Base 24.04.1 arm64
+        ROOTFS_URL="http://cdimage.ubuntu.com/ubuntu-base/releases/24.04.1/release/ubuntu-base-24.04.1-base-arm64.tar.gz"
+        mkdir -p "$ROOTFS_DIR"
+        wget -q -O rootfs.tar.gz "$ROOTFS_URL"
+        echo "Extracting rootfs..."
+        tar -xzf rootfs.tar.gz -C "$ROOTFS_DIR"
+        rm rootfs.tar.gz
+        
+        # Enable DNS in the chroot
+        echo "nameserver 8.8.8.8" > "$ROOTFS_DIR/etc/resolv.conf"
+    fi
+
+    # Inject kernel modules into the rootfs
+    # virtme-ng usually handles modules, but cross-arch with --root might need help if host path != guest path.
+    # Host: /lib/modules/$KERNEL_RELEASE (installed by setup script)
+    # Guest: /lib/modules/$KERNEL_RELEASE
+    echo "Injecting kernel modules into rootfs..."
+    mkdir -p "$ROOTFS_DIR/lib/modules"
+    sudo cp -rn "/lib/modules/$KERNEL_RELEASE" "$ROOTFS_DIR/lib/modules/" || echo "Warning: module copy failed or exists"
+
+    # We need to ensure the workspace (where Tracee is) is mounted in the guest.
+    # vng --pwd mounts the current directory to the same path in the guest.
+    # BUT since we are providing a custom rootfs, the mount points must exist.
+    # We are in $(pwd).
+    # Create the mount point in the rootfs.
+    mkdir -p "$ROOTFS_DIR/$(pwd)"
+
+    echo "Using custom rootfs: $ROOTFS_DIR"
+    VNG_ARGS+=(--root "$ROOTFS_DIR")
+    
+    # We need to manually specify the exec command because --root changes things?
+    # No, --exec should still work, but requires --rw or similar.
+    # --pwd mounts CWD.
+    VNG_ARGS+=(--pwd)
+    VNG_ARGS+=(--rw)
+
+    # The command needs to run inside the guest. The path to CMD is fully qualified.
+    # Since we mount CWD, the path should be valid.
+    VNG_ARGS+=(--exec "$CMD")
+
+else
+    # Native architecture - use host rootfs
+    VNG_ARGS+=(--rw)
+    VNG_ARGS+=(--exec "$CMD")
 fi
 
+echo "Launching virtme-ng..."
 echo "Running: ${VNG_ARGS[*]}"
 "${VNG_ARGS[@]}"

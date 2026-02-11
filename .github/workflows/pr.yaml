@@ -56,12 +56,29 @@ jobs:
         run: |
           sudo ./scripts/installation/install-deps-ubuntu.sh
           sudo ./scripts/installation/install-clang.sh
-          # Install QEMU for the target architecture
+
+          # Install QEMU for multi-arch support
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-system-arm qemu-user-static
 
+          # Install cross-compilers if needed
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            echo "Installing aarch64 cross-compiler..."
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          fi
+
       - name: "Build Tracee"
         run: |
+          # Configure cross-compilation if needed
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            export GOARCH=arm64
+            export CC=aarch64-linux-gnu-gcc
+            export CXX=aarch64-linux-gnu-g++
+            # Override UNAME_M so Makefile detects cross-compilation target
+            export UNAME_M=aarch64
+            echo "Building for aarch64 (cross-compile)..."
+          fi
+
           make tracee
 
       - name: "Run Tests in QEMU"
