@@ -150,33 +150,60 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
         tar -xzf rootfs.tar.gz -C "$ROOTFS_DIR"
         rm rootfs.tar.gz
         
-        # Enable DNS in the chroot
-        echo "nameserver 8.8.8.8" > "$ROOTFS_DIR/etc/resolv.conf"
+    # Enable DNS in the chroot
+    echo "nameserver 8.8.8.8" > "$ROOTFS_DIR/etc/resolv.conf"
+
+    # Install curl inside rootfs (needed for Tracee healthcheck)
+    # This requires qemu-user-static on the host to run aarch64 binaries.
+    if [[ -f /usr/bin/qemu-aarch64-static ]]; then
+        echo "Installing curl in aarch64 rootfs using qemu-user-static..."
+        sudo cp /usr/bin/qemu-aarch64-static "$ROOTFS_DIR/usr/bin/"
+        
+        # Mount /dev, /proc, /sys for apt
+        sudo mount --bind /dev "$ROOTFS_DIR/dev"
+        sudo mount --bind /proc "$ROOTFS_DIR/proc"
+        sudo mount --bind /sys "$ROOTFS_DIR/sys"
+        
+        # Run apt-get update && install curl
+        # We ignore errors to avoid breaking if transient network issues occur,
+        # but we really need curl.
+        sudo chroot "$ROOTFS_DIR" /bin/bash -c "apt-get update && apt-get install -y curl ca-certificates" || echo "Warning: apt-get failed in chroot"
+        
+        # Cleanup
+        sudo umount "$ROOTFS_DIR/sys"
+        sudo umount "$ROOTFS_DIR/proc"
+        sudo umount "$ROOTFS_DIR/dev"
+    else
+        echo "Warning: qemu-aarch64-static not found. Skipping curl installation. Health check might fail."
     fi
+fi
 
-    # Inject kernel modules into the rootfs
-    # virtme-ng usually handles modules, but cross-arch with --root might need help if host path != guest path.
-    # Host: /lib/modules/$KERNEL_RELEASE (installed by setup script)
-    # Guest: /lib/modules/$KERNEL_RELEASE
-    echo "Injecting kernel modules into rootfs..."
-    mkdir -p "$ROOTFS_DIR/lib/modules"
-    sudo cp -rn "/lib/modules/$KERNEL_RELEASE" "$ROOTFS_DIR/lib/modules/" || echo "Warning: module copy failed or exists"
+# Inject kernel modules into the rootfs
+# virtme-ng usually handles modules, but cross-arch with --root might need help if host path != guest path.
+# Host: /lib/modules/$KERNEL_RELEASE (installed by setup script)
+# Guest: /lib/modules/$KERNEL_RELEASE
+echo "Injecting kernel modules into rootfs..."
+mkdir -p "$ROOTFS_DIR/lib/modules"
+sudo cp -rn "/lib/modules/$KERNEL_RELEASE" "$ROOTFS_DIR/lib/modules/" || echo "Warning: module copy failed or exists"
 
-    # We need to ensure the workspace (where Tracee is) is mounted in the guest.
-    # vng --pwd mounts the current directory to the same path in the guest.
-    # BUT since we are providing a custom rootfs, the mount points must exist.
-    # We are in $(pwd).
-    # Create the mount point in the rootfs.
-    mkdir -p "$ROOTFS_DIR/$(pwd)"
+# We need to ensure the workspace (where Tracee is) is mounted in the guest.
+# vng --pwd mounts the current directory to the same path in the guest.
+# BUT since we are providing a custom rootfs, the mount points must exist.
+# We are in $(pwd).
+# Create the mount point in the rootfs.
+mkdir -p "$ROOTFS_DIR/$(pwd)"
 
-    echo "Using custom rootfs: $ROOTFS_DIR"
-    VNG_ARGS+=(--root "$ROOTFS_DIR")
-    
-    # Ensure /tmp exists and has correct permissions in rootfs
-    mkdir -p "$ROOTFS_DIR/tmp"
-    chmod 1777 "$ROOTFS_DIR/tmp"
-    
-    # We need to manually specify the exec command because --root changes things?
+echo "Using custom rootfs: $ROOTFS_DIR"
+VNG_ARGS+=(--root "$ROOTFS_DIR")
+
+# Ensure /tmp exists and has correct permissions in rootfs
+mkdir -p "$ROOTFS_DIR/tmp"
+chmod 1777 "$ROOTFS_DIR/tmp"
+
+# Add entropy to guest to prevent boot hangs
+VNG_ARGS+=(--qemu-opts -device virtio-rng-pci)
+
+# We need to manually specify the exec command because --root changes things?
     # No, --exec should still work, but requires --rw or similar.
     # --pwd mounts CWD.
     VNG_ARGS+=(--pwd)
