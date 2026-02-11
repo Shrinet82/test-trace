@@ -194,7 +194,7 @@ echo "Using custom rootfs: $ROOTFS_DIR"
 VNG_ARGS+=(--root "$ROOTFS_DIR")
 
 # Add entropy to guest to prevent boot hangs
-VNG_ARGS+=(--qemu-opts "-device virtio-rng-pci")
+VNG_ARGS+=(--qemu-opts="-device virtio-rng-pci")
 
 # We need to manually specify the exec command because --root changes things?
     # No, --exec should still work, but requires --rw or similar.
