@@ -153,6 +153,10 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     # Enable DNS in the chroot
     echo "nameserver 8.8.8.8" > "$ROOTFS_DIR/etc/resolv.conf"
 
+    # Create /tmp in rootfs before doing anything else (apt needs it)
+    mkdir -p "$ROOTFS_DIR/tmp"
+    chmod 1777 "$ROOTFS_DIR/tmp"
+
     # Install curl inside rootfs (needed for Tracee healthcheck)
     # This requires qemu-user-static on the host to run aarch64 binaries.
     if [[ -f /usr/bin/qemu-aarch64-static ]]; then
@@ -167,7 +171,7 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
         # Run apt-get update && install curl
         # We ignore errors to avoid breaking if transient network issues occur,
         # but we really need curl.
-        sudo chroot "$ROOTFS_DIR" /bin/bash -c "apt-get update && apt-get install -y curl ca-certificates" || echo "Warning: apt-get failed in chroot"
+        sudo chroot "$ROOTFS_DIR" /bin/bash -c "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates" || echo "Warning: apt-get failed in chroot"
         
         # Cleanup
         sudo umount "$ROOTFS_DIR/sys"
@@ -179,29 +183,18 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
 fi
 
 # Inject kernel modules into the rootfs
-# virtme-ng usually handles modules, but cross-arch with --root might need help if host path != guest path.
-# Host: /lib/modules/$KERNEL_RELEASE (installed by setup script)
-# Guest: /lib/modules/$KERNEL_RELEASE
 echo "Injecting kernel modules into rootfs..."
 mkdir -p "$ROOTFS_DIR/lib/modules"
 sudo cp -rn "/lib/modules/$KERNEL_RELEASE" "$ROOTFS_DIR/lib/modules/" || echo "Warning: module copy failed or exists"
 
 # We need to ensure the workspace (where Tracee is) is mounted in the guest.
-# vng --pwd mounts the current directory to the same path in the guest.
-# BUT since we are providing a custom rootfs, the mount points must exist.
-# We are in $(pwd).
-# Create the mount point in the rootfs.
 mkdir -p "$ROOTFS_DIR/$(pwd)"
 
 echo "Using custom rootfs: $ROOTFS_DIR"
 VNG_ARGS+=(--root "$ROOTFS_DIR")
 
-# Ensure /tmp exists and has correct permissions in rootfs
-mkdir -p "$ROOTFS_DIR/tmp"
-chmod 1777 "$ROOTFS_DIR/tmp"
-
 # Add entropy to guest to prevent boot hangs
-VNG_ARGS+=(--qemu-opts -device virtio-rng-pci)
+VNG_ARGS+=(--qemu-opts "-device virtio-rng-pci")
 
 # We need to manually specify the exec command because --root changes things?
     # No, --exec should still work, but requires --rw or similar.
