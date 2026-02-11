@@ -117,7 +117,16 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
         
         # Extract
         dpkg-deb -x busybox.deb "$BUSYBOX_DIR/extracted"
-        cp "$BUSYBOX_DIR/extracted/bin/busybox" "$BUSYBOX_BIN"
+        
+        # Find the binary (could be in /bin, /usr/bin, etc.)
+        FOUND_BIN=$(find "$BUSYBOX_DIR/extracted" -name busybox -type f | head -n 1)
+        if [[ -z "$FOUND_BIN" ]]; then
+            echo "Error: busybox binary not found in extracted deb"
+            find "$BUSYBOX_DIR/extracted"
+            exit 1
+        fi
+        
+        cp "$FOUND_BIN" "$BUSYBOX_BIN"
         chmod +x "$BUSYBOX_BIN"
     fi
     
