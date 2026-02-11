@@ -119,7 +119,7 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     fi
     
     VNG_ARGS+=(--busybox "$BUSYBOX_BIN")
-}
+
     # We'll use Ubuntu Base 24.04 (Noble) for arm64.
 
     ROOTFS_DIR="$(pwd)/rootfs-aarch64"
