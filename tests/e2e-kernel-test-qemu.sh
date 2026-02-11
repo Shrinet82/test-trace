@@ -135,6 +135,10 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     echo "Using custom rootfs: $ROOTFS_DIR"
     VNG_ARGS+=(--root "$ROOTFS_DIR")
     
+    # Ensure /tmp exists and has correct permissions in rootfs
+    mkdir -p "$ROOTFS_DIR/tmp"
+    chmod 1777 "$ROOTFS_DIR/tmp"
+    
     # We need to manually specify the exec command because --root changes things?
     # No, --exec should still work, but requires --rw or similar.
     # --pwd mounts CWD.
@@ -147,7 +151,7 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
 
 else
     # Native architecture - use host rootfs
-    VNG_ARGS+=(--rw)
+    # NOTE: Do NOT use --rw for native, it causes permission issues with /tmp overlay
     VNG_ARGS+=(--exec "$CMD")
 fi
 
