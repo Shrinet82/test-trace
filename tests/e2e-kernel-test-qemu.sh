@@ -96,7 +96,8 @@ VNG_ARGS=(
 # For cross-architecture emulation
 if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     echo "Cross-architecture emulation: $QEMU_ARCH on $(uname -m)"
-    VNG_ARGS+=(--arch "$QEMU_ARCH")
+    # virtme-ng expects 'arm64', not 'aarch64'
+    VNG_ARGS+=(--arch "arm64")
 
     # For cross-arch, virtme-ng cannot use the host rootfs.
     # We must provide an architecture-compatible rootfs.
