@@ -105,8 +105,8 @@ if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     ROOTFS_DIR="$(pwd)/rootfs-aarch64"
     if [[ ! -d "$ROOTFS_DIR" ]]; then
         echo "Downloading Ubuntu Base aarch64 rootfs..."
-        # URL for Ubuntu Base 24.04.1 arm64
-        ROOTFS_URL="http://cdimage.ubuntu.com/ubuntu-base/releases/24.04.1/release/ubuntu-base-24.04.1-base-arm64.tar.gz"
+        # URL for Ubuntu Base 24.04 arm64
+        ROOTFS_URL="http://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-arm64.tar.gz"
         mkdir -p "$ROOTFS_DIR"
         wget -q -O rootfs.tar.gz "$ROOTFS_URL"
         echo "Extracting rootfs..."
