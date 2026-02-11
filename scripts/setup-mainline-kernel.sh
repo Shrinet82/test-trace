@@ -53,6 +53,9 @@ echo "Setting up Mainline Kernel $VERSION_CLEAN for $ARCH..."
 echo "Base URL: $BASE_URL"
 
 WORK_DIR=$(mktemp -d)
+# Ensure cleanup on exit (success or failure)
+trap 'rm -rf "$WORK_DIR"' EXIT
+
 cd "$WORK_DIR"
 
 # Download index
@@ -65,10 +68,21 @@ fi
 # Find relevant .deb files
 # Needs: linux-headers-*-generic, linux-modules-*-generic, linux-image-unsigned-*-generic
 # or linux-image-*-generic if unsigned not present.
-# Regex to match deb files for arch
-PACKAGES=$(grep -o 'href="[^"]*"' index.html | cut -d'"' -f2 | grep "_${ARCH}.deb" | grep -E "linux-headers.*generic|linux-modules.*generic|linux-image.*generic")
+# We need BOTH arch-specific (_${ARCH}.deb) AND arch-independent (_all.deb) packages.
+# The _all.deb packages contain shared headers required by the arch-specific headers.
 
-# Also need linux-headers-all for some versions? Usually included in generic depend.
+ARCH_PACKAGES=$(grep -o 'href="[^"]*"' index.html | cut -d'"' -f2 | grep "_${ARCH}.deb" | grep -E "linux-headers.*generic|linux-modules.*generic|linux-image.*generic" || true)
+
+ALL_PACKAGES=$(grep -o 'href="[^"]*"' index.html | cut -d'"' -f2 | grep "_all.deb" | grep -E "linux-headers" || true)
+
+PACKAGES="$ARCH_PACKAGES"
+if [ -n "$ALL_PACKAGES" ]; then
+    PACKAGES="$PACKAGES $ALL_PACKAGES"
+fi
+
+# Trim whitespace
+PACKAGES=$(echo "$PACKAGES" | xargs)
+
 if [ -z "$PACKAGES" ]; then
     echo "Error: No packages found for $VERSION_CLEAN ($ARCH) at $BASE_URL"
     exit 1
@@ -83,13 +97,6 @@ for pkg in $PACKAGES; do
 done
 
 echo "Installing kernel packages..."
-# Install using dpkg
-# We might need to force architecture if we are installing foreign packages (e.g. arm64 on amd64)
-# dpkg --add-architecture arm64?
-# No, we can install them but not run post-install hooks that try to update grub?
-# If we just need the files in /boot, maybe we can extract them instead of installing?
-# Installing foreign arch packages on Ubuntu might fail unless multiarch is setup.
-# Let's try to EXTRACT first if arch mismatch?
 
 HOST_ARCH=$(dpkg --print-architecture)
 
@@ -98,21 +105,18 @@ if [[ "$HOST_ARCH" != "$ARCH" ]]; then
     for deb in *.deb; do
         dpkg -x "$deb" extracted
     done
-    
-    # Move kernel files to /boot manually?
-    # Or keep them in a specific dir?
-    # Our test script expects them in /boot.
-    # We can move them to /boot/ (renaming if collision?)
+
     echo "Moving extracted files to /boot..."
     sudo cp -rn extracted/boot/* /boot/ || echo "Warning: copy failed or files exist"
-    
+
     # We also need modules in /lib/modules
-    echo "Moving modules to /lib/modules..."
-    sudo cp -rn extracted/lib/modules/* /lib/modules/ || echo "Warning: copy failed or modules exist"
-    
-    # Cleanups
+    if [ -d extracted/lib/modules ]; then
+        echo "Moving modules to /lib/modules..."
+        sudo cp -rn extracted/lib/modules/* /lib/modules/ || echo "Warning: copy failed or modules exist"
+    fi
+
     rm -rf extracted
-else 
+else
     # Same arch, just install
     if ! sudo dpkg -i *.deb; then
         echo "Warning: dpkg complained about dependencies. Attempting fix..."
@@ -122,21 +126,25 @@ fi
 
 # Locate installed files
 echo "Checking installed kernel files in /boot..."
-# We need to find the specific files we just installed/extracted
-# VERSION_CLEAN helps grep
-INSTALLED_KERNEL=$(ls /boot/vmlinuz* | grep "$VERSION_CLEAN" | grep -v "old" | sort -V | tail -n1)
+INSTALLED_KERNEL=$(ls /boot/vmlinuz* 2>/dev/null | grep "$VERSION_CLEAN" | grep -v "old" | sort -V | tail -n1 || true)
 
 if [ -z "$INSTALLED_KERNEL" ]; then
     echo "Error: Could not find vmlinuz for $VERSION_CLEAN in /boot"
+    echo "Available kernels:"
+    ls -l /boot/vmlinuz* 2>/dev/null || echo "  (none)"
     exit 1
 fi
 
 KERNEL_RELEASE=$(basename "$INSTALLED_KERNEL" | sed 's/vmlinuz-//')
 echo "Detected installed kernel release: $KERNEL_RELEASE"
 
+if [ -z "$KERNEL_RELEASE" ]; then
+    echo "Error: Failed to determine kernel release from $INSTALLED_KERNEL"
+    exit 1
+fi
+
 if [ -n "${GITHUB_ENV:-}" ]; then
     echo "KERNEL_RELEASE=$KERNEL_RELEASE" >> "$GITHUB_ENV"
 fi
 
-rm -rf "$WORK_DIR"
 exit 0

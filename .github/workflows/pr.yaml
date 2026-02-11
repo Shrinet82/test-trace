@@ -36,24 +36,27 @@ jobs:
       - name: Prepare Environment
         run: |
           mkdir -p /tmp/root /tmp/go /tmp/go-cache
+
       - name: "Checkout"
         uses: actions/checkout@v4
         with:
           submodules: true
           ref: ${{ env.TRACEE_REF }}
 
+      - name: "Disable Unattended Upgrades"
+        run: |
+          sudo ./scripts/disable-unattended-upgrades.sh
+
       - name: "Setup Mainline Kernel"
         run: |
           chmod +x ./scripts/setup-mainline-kernel.sh
-          # Run with sudo to install kernel packages
           sudo ./scripts/setup-mainline-kernel.sh "${{ matrix.kernel_version }}" --arch "${{ matrix.arch }}"
 
       - name: "Install Tooling & Dependencies"
         run: |
-          # Scripts require sudo for apt-get actions
           sudo ./scripts/installation/install-deps-ubuntu.sh
           sudo ./scripts/installation/install-clang.sh
-          # Install QEMU for multi-arch support
+          # Install QEMU for the target architecture
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-system-arm qemu-user-static
 
@@ -64,11 +67,15 @@ jobs:
       - name: "Run Tests in QEMU"
         run: |
           chmod +x ./tests/e2e-kernel-test-qemu.sh
+          chmod +x ./tests/e2e-kernel-test-qemu-exec.sh
           ./tests/e2e-kernel-test-qemu.sh "${{ matrix.kernel_version }}" "${{ matrix.arch }}"
 
       - name: Upload Logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qemu-logs-${{ matrix.job_name }}
-          path: /tmp/tracee*
+          path: |
+            ./qemu-artifacts/
+            /tmp/tracee*
+          if-no-files-found: warn

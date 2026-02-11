@@ -24,11 +24,21 @@ echo "Configuration: Kernel=$KERNEL_VERSION, Arch=$ARCH, QEMU_ARCH=$QEMU_ARCH"
 
 # Install virtme from upstream git and patch QEMU compatibility issues
 install_virtme() {
+    # Ensure ~/.local/bin is on PATH (pip user installs go there)
+    export PATH="$HOME/.local/bin:$PATH"
+
     if command -v virtme-run >/dev/null 2>&1; then
         echo "virtme-run already available"
     else
         echo "Installing virtme from upstream git..."
         pip3 install git+https://github.com/amluto/virtme.git
+    fi
+
+    # Verify virtme-run is available after install
+    if ! command -v virtme-run >/dev/null 2>&1; then
+        echo "Error: virtme-run not found on PATH after installation"
+        echo "PATH=$PATH"
+        exit 1
     fi
 
     # Patch: QEMU 9.x (Ubuntu 24.04) removed the legacy '-watchdog' CLI option.
@@ -54,9 +64,6 @@ install_virtme() {
     else
         echo "WARNING: Could not locate virtme package directory"
     fi
-
-    # Verify the patch by showing what QEMU command would be generated
-    echo "Verifying patch with --show-command..."
 }
 
 install_virtme
@@ -92,19 +99,11 @@ sudo cp "$KERNEL_IMG" "$LOCAL_KERNEL"
 sudo chmod +r "$LOCAL_KERNEL"
 KERNEL_IMG="$LOCAL_KERNEL"
 
+echo "Kernel image ready at: $KERNEL_IMG"
+
 # Prepare test command
 CMD="$(pwd)/tests/e2e-kernel-test-qemu-exec.sh"
 chmod +x "$CMD"
-
-# First, show the QEMU command for debugging (dry run)
-echo "=== DRY RUN (showing QEMU command) ==="
-virtme-run \
-    --kimg "$KERNEL_IMG" \
-    --memory 4G \
-    --cpus 2 \
-    --show-command || echo "(show-command returned non-zero, continuing anyway)"
-
-echo "=== END DRY RUN ==="
 
 echo "Launching virtme-run with kernel: $KERNEL_IMG"
 

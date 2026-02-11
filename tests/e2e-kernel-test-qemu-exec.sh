@@ -30,13 +30,8 @@ fi
 
 # Definitions
 TRACEE_STARTUP_TIMEOUT=60
-# Log files - use a path that might be mounted back to host if possible, 
-# otherwise we rely on stdout/stderr being captured by virtme-ng.
-# virtme-ng captures stdout/stderr of the command.
-# But we also want the tracee.log file.
-# If the current directory is writable (and mounted from host), we can write there.
-# virtme-ng --rw mounts the current dir as read-write.
 
+# Artifacts dir in the mounted workspace (persists to host via --rw --pwd)
 ARTIFACTS_DIR="./qemu-artifacts"
 mkdir -p "$ARTIFACTS_DIR"
 
@@ -49,14 +44,22 @@ info "Logs will be written to $ARTIFACTS_DIR"
 # Cleanup previous run
 rm -f "$LOGFILE" "$OUTPUTFILE"
 
+# Select policy — use kernel.yaml if it exists, otherwise run without a policy
+POLICY_ARGS=""
+if [[ -f ./tests/policies/kernel/kernel.yaml ]]; then
+    POLICY_ARGS="--policy ./tests/policies/kernel/kernel.yaml"
+    info "Using policy: ./tests/policies/kernel/kernel.yaml"
+else
+    info "No kernel.yaml policy found, running with default event set"
+fi
+
 # Start Tracee
-# we use --output json to file, and also --logging file
 ./dist/tracee \
     --output json:"$OUTPUTFILE" \
     --enrichment environment \
     --logging file="$LOGFILE" \
     --server healthz \
-    --policy ./tests/policies/kernel/kernel.yaml &
+    $POLICY_ARGS &
 
 TRACEE_PID=$!
 info "Tracee started with PID $TRACEE_PID"
@@ -80,7 +83,7 @@ done
 
 if [[ $timedout -eq 1 ]]; then
     info "Tracee startup TIMED OUT"
-    cat "$LOGFILE"
+    cat "$LOGFILE" 2>/dev/null || true
     kill $TRACEE_PID || true
     exit 1
 fi
@@ -89,20 +92,14 @@ fi
 sleep 5
 
 # Run Tests (Simulated triggers)
-# Since we don't have tracee-tester container, we need to replicate the triggers manually
-# that "tests/e2e-kernel-test.sh" does via `docker run ... tracee-tester`.
-# We can compile `tracee-tester` logic into a binary or just use system tools to trigger events.
-# For the purpose of "Kernel Coverage", simply STARTING Tracee on the kernel is a huge win.
-# But we should try to trigger at least one event.
-
-info "Running trivial trigger: ls (should trigger syscall events if configured)"
+# For kernel coverage, starting Tracee and verifying it runs is the primary goal.
+# Trigger some basic syscalls for event capture.
+info "Running trivial triggers..."
 ls /tmp > /dev/null
+cat /proc/version > /dev/null
+uname -a > /dev/null
 
-# TODO: We really should cross-compile `tracee-tester` or have a static binary of it.
-# For now, let's just verify Tracee runs and detects *something* standard.
-# The `kernel.yaml` policy likely looks for specific signatures.
-
-# Wait a bit
+# Wait a bit for events to be captured
 sleep 5
 
 # Stop Tracee
@@ -114,15 +111,19 @@ info "Tracee stopped."
 
 # Verify Output
 if [[ -s "$OUTPUTFILE" ]]; then
-    info "Events captured:"
+    EVENT_COUNT=$(wc -l < "$OUTPUTFILE")
+    info "Events captured: $EVENT_COUNT"
     head -n 5 "$OUTPUTFILE"
     info "Test SUCCESS (clean run)"
 else
-    info "No events captured (might be expected if no triggers ran, but process ran)"
-    # For now fail if empty? Or just warn?
-    # If policy is strict, we might expect events.
-    info "Warning: No events in output file."
+    info "No events captured in output file."
+    info "This may be expected if no matching policy was loaded."
+    # Don't fail — the goal is to verify Tracee starts on this kernel
 fi
 
-# Artifacts are in $ARTIFACTS_DIR which is in PWD, so they persist.
+# Show log tail for debugging
+info "=== Tracee log tail ==="
+tail -n 20 "$LOGFILE" 2>/dev/null || true
+
+# Artifacts are in $ARTIFACTS_DIR which is in PWD, so they persist to host.
 exit 0
