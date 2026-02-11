@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Run E2E Kernel Tests inside QEMU (using virtme)
+# Run E2E Kernel Tests inside QEMU (using virtme-ng)
 # Usage: ./e2e-kernel-test-qemu.sh [kernel-version] [arch]
 # Example: ./e2e-kernel-test-qemu.sh v6.12 x86_64
 #
@@ -22,56 +22,33 @@ fi
 
 echo "Configuration: Kernel=$KERNEL_VERSION, Arch=$ARCH, QEMU_ARCH=$QEMU_ARCH"
 
-# Install virtme from upstream git and patch QEMU compatibility issues
-install_virtme() {
-    # Ensure ~/.local/bin is on PATH (pip user installs go there)
-    export PATH="$HOME/.local/bin:$PATH"
+# Ensure ~/.local/bin is on PATH (pip user installs go there)
+export PATH="$HOME/.local/bin:$PATH"
 
-    if command -v virtme-run >/dev/null 2>&1; then
-        echo "virtme-run already available"
-    else
-        echo "Installing virtme from upstream git..."
-        pip3 install git+https://github.com/amluto/virtme.git
+# Install virtme-ng (vng) — the modern, maintained fork
+install_virtme_ng() {
+    if command -v vng >/dev/null 2>&1; then
+        echo "vng (virtme-ng) already available: $(vng --version 2>&1 || true)"
+        return
     fi
 
-    # Verify virtme-run is available after install
-    if ! command -v virtme-run >/dev/null 2>&1; then
-        echo "Error: virtme-run not found on PATH after installation"
+    echo "Installing virtme-ng..."
+    pip3 install virtme-ng
+
+    if ! command -v vng >/dev/null 2>&1; then
+        echo "Error: vng not found on PATH after installation"
         echo "PATH=$PATH"
         exit 1
     fi
-
-    # Patch: QEMU 9.x (Ubuntu 24.04) removed the legacy '-watchdog' CLI option.
-    # virtme still emits '-watchdog i6300esb'. We must remove ALL occurrences.
-    VIRTME_PKG_DIR=$(python3 -c "import virtme; import os; print(os.path.dirname(virtme.__file__))" 2>/dev/null || true)
-    if [[ -n "$VIRTME_PKG_DIR" && -d "$VIRTME_PKG_DIR" ]]; then
-        echo "Virtme package dir: $VIRTME_PKG_DIR"
-        echo "Searching for ALL -watchdog references..."
-        # Find every file that mentions watchdog
-        WATCHDOG_FILES=$(grep -rl "watchdog" "$VIRTME_PKG_DIR" 2>/dev/null || true)
-        if [[ -n "$WATCHDOG_FILES" ]]; then
-            echo "Found watchdog references in:"
-            echo "$WATCHDOG_FILES"
-            for f in $WATCHDOG_FILES; do
-                echo "  Patching: $f"
-                # Remove any line containing 'watchdog' (covers all variants)
-                sed -i '/watchdog/d' "$f"
-            done
-            echo "All watchdog references patched."
-        else
-            echo "No watchdog references found (already clean)."
-        fi
-    else
-        echo "WARNING: Could not locate virtme package directory"
-    fi
+    echo "virtme-ng installed: $(vng --version 2>&1 || true)"
 }
 
-install_virtme
+install_virtme_ng
 
 # Locate kernel image
 if [[ "$KERNEL_VERSION" == v* ]]; then
     VERSION_NUM=${KERNEL_VERSION#v}
-    KERNEL_RELEASE=$(ls /boot/vmlinuz* 2>/dev/null | grep "$VERSION_NUM" | sort -V | tail -n1 | sed 's/.*vmlinuz-//')
+    KERNEL_RELEASE=$(ls /boot/vmlinuz* 2>/dev/null | grep "$VERSION_NUM" | sort -V | tail -n1 | sed 's/.*vmlinuz-//' || true)
 else
     KERNEL_RELEASE=$KERNEL_VERSION
 fi
@@ -91,38 +68,41 @@ if [[ ! -f "$KERNEL_IMG" ]]; then
     exit 1
 fi
 
-# /boot is root-owned — CI runner user cannot read it directly.
-# Copy the kernel to the workspace so QEMU (running as runner user) can access it.
+# /boot is root-owned — CI runner user cannot read vmlinuz directly.
+# Copy the kernel to the workspace so QEMU can access it.
 LOCAL_KERNEL="./vmlinuz-$KERNEL_RELEASE"
 echo "Copying kernel to workspace for QEMU access..."
 sudo cp "$KERNEL_IMG" "$LOCAL_KERNEL"
 sudo chmod +r "$LOCAL_KERNEL"
-KERNEL_IMG="$LOCAL_KERNEL"
 
-echo "Kernel image ready at: $KERNEL_IMG"
+echo "Kernel image ready at: $LOCAL_KERNEL"
 
 # Prepare test command
 CMD="$(pwd)/tests/e2e-kernel-test-qemu-exec.sh"
 chmod +x "$CMD"
 
-echo "Launching virtme-run with kernel: $KERNEL_IMG"
+echo "Launching virtme-ng (vng) with kernel: $LOCAL_KERNEL"
 
-# Build virtme-run command
-VIRTME_ARGS=(
-    virtme-run
-    --kimg "$KERNEL_IMG"
+# Build vng command
+# -r <path>  : run with a pre-built kernel image
+# --rw       : mount root filesystem read-write
+# --exec     : execute a command inside the VM
+# --memory   : VM memory
+# --cpus     : VM CPUs
+VNG_ARGS=(
+    vng
+    -r "$LOCAL_KERNEL"
+    --rw
     --memory 4G
     --cpus 2
-    --rw
-    --pwd
-    --script-exec "$CMD"
+    --exec "$CMD"
 )
 
-# For cross-architecture, use --arch
+# For cross-architecture emulation
 if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     echo "Cross-architecture emulation: $QEMU_ARCH on $(uname -m)"
-    VIRTME_ARGS+=(--arch "$QEMU_ARCH")
+    VNG_ARGS+=(--arch "$QEMU_ARCH")
 fi
 
-echo "Running: ${VIRTME_ARGS[*]}"
-"${VIRTME_ARGS[@]}"
+echo "Running: ${VNG_ARGS[*]}"
+"${VNG_ARGS[@]}"
