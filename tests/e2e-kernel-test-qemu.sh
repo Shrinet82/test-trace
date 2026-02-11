@@ -99,11 +99,27 @@ VNG_ARGS=(
 # For cross-architecture emulation
 if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
     echo "Cross-architecture emulation: $QEMU_ARCH on $(uname -m)"
-    # virtme-ng expects 'arm64', not 'aarch64'
-    VNG_ARGS+=(--arch "arm64")
+    # Ensure virtme-ng cache directory exists (fixes QEMU mount error)
+    mkdir -p "$HOME/.cache/virtme-ng"
 
-    # For cross-arch, virtme-ng cannot use the host rootfs.
-    # We must provide an architecture-compatible rootfs.
+    # Download static busybox for aarch64 (initramfs needs it)
+    BUSYBOX_DIR="$(pwd)/busybox-aarch64"
+    BUSYBOX_BIN="$BUSYBOX_DIR/busybox"
+    if [[ ! -f "$BUSYBOX_BIN" ]]; then
+        echo "Downloading static busybox for aarch64..."
+        mkdir -p "$BUSYBOX_DIR"
+        # URL for busybox-static arm64 deb from Debian (stable)
+        BUSYBOX_URL="http://ftp.de.debian.org/debian/pool/main/b/busybox/busybox-static_1.36.1-3+b1_arm64.deb"
+        wget -q -O busybox.deb "$BUSYBOX_URL" || wget -q -O busybox.deb "http://ftp.de.debian.org/debian/pool/main/b/busybox/busybox-static_1.35.0-4+b3_arm64.deb"
+        
+        # Extract
+        dpkg-deb -x busybox.deb "$BUSYBOX_DIR/extracted"
+        cp "$BUSYBOX_DIR/extracted/bin/busybox" "$BUSYBOX_BIN"
+        chmod +x "$BUSYBOX_BIN"
+    fi
+    
+    VNG_ARGS+=(--busybox "$BUSYBOX_BIN")
+}
     # We'll use Ubuntu Base 24.04 (Noble) for arm64.
 
     ROOTFS_DIR="$(pwd)/rootfs-aarch64"
