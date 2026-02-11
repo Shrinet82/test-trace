@@ -45,7 +45,7 @@ install_virtme_ng() {
 
 install_virtme_ng
 
-# Locate kernel image
+# Locate kernel image and release
 if [[ "$KERNEL_VERSION" == v* ]]; then
     VERSION_NUM=${KERNEL_VERSION#v}
     KERNEL_RELEASE=$(ls /boot/vmlinuz* 2>/dev/null | grep "$VERSION_NUM" | sort -V | tail -n1 | sed 's/.*vmlinuz-//' || true)
@@ -77,22 +77,39 @@ sudo chmod +r "$LOCAL_KERNEL"
 
 echo "Kernel image ready at: $LOCAL_KERNEL"
 
+# Verify modules are available
+MODULES_DIR="/lib/modules/$KERNEL_RELEASE"
+if [[ -d "$MODULES_DIR" ]]; then
+    echo "Kernel modules found: $MODULES_DIR"
+else
+    echo "WARNING: Kernel modules directory not found: $MODULES_DIR"
+    echo "Available modules:"
+    ls /lib/modules/ 2>/dev/null || echo "  (none)"
+fi
+
 # Prepare test command
 CMD="$(pwd)/tests/e2e-kernel-test-qemu-exec.sh"
 chmod +x "$CMD"
 
-echo "Launching virtme-ng (vng) with kernel: $LOCAL_KERNEL"
+echo "Launching virtme-ng (vng) with kernel release: $KERNEL_RELEASE"
 
-# Build vng command
-# -r <path>  : run with a pre-built kernel image
-# --rw       : mount root filesystem read-write
-# --exec     : execute a command inside the VM
-# --memory   : VM memory
-# --cpus     : VM CPUs
+# Use "vng -r <kernel-release>" which tells virtme-ng to use the installed
+# kernel at /boot/vmlinuz-<release> with modules at /lib/modules/<release>.
+# We've already copied vmlinuz to be readable, but vng -r with the release
+# name should find both the kernel and its modules automatically.
+#
+# However, since the kernel in /boot might not be readable by runner user,
+# we also try passing the local copy as a path. virtme-ng handles both:
+#   vng -r 6.11.0-061100-generic  (by release name)
+#   vng -r ./vmlinuz-...          (by path)
+
+# Make /boot/vmlinuz readable so vng can find it by release name
+sudo chmod +r "$KERNEL_IMG" 2>/dev/null || true
+
 VNG_ARGS=(
     vng
-    -r "$LOCAL_KERNEL"
-    --rw
+    -r "$KERNEL_RELEASE"
+    --verbose
     --memory 4G
     --cpus 2
     --exec "$CMD"
