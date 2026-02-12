@@ -16,7 +16,7 @@ jobs:
       mainline_matrix: ${{ steps.generate.outputs.mainline_matrix }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.TRACEE_REF }}
       - name: Generate Matrix
@@ -38,7 +38,7 @@ jobs:
           mkdir -p /tmp/root /tmp/go /tmp/go-cache
 
       - name: "Checkout"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: true
           ref: ${{ env.TRACEE_REF }}
@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload Logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: qemu-logs-${{ matrix.job_name }}
           path: |
