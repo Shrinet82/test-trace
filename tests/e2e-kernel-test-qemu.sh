@@ -99,15 +99,7 @@ VNG_ARGS=(
     --cpus 2
 )
 
-# Cross-architecture emulation check
-if [[ "$QEMU_ARCH" != "$(uname -m)" ]]; then
-    echo "ERROR: Cross-architecture emulation ($QEMU_ARCH on $(uname -m)) is not supported."
-    echo "aarch64 kernel testing requires native arm64 runners."
-    echo "TCG emulation is too slow (~50x slower) for running Tracee (eBPF, module loading, etc.)."
-    exit 1
-fi
-
-# Native architecture - use host rootfs
+# Native execution (or same-arch emulation) - use host rootfs
 VNG_ARGS+=(--exec "$CMD")
 
 echo "Launching virtme-ng..."
