@@ -36,7 +36,21 @@ install_virtme_ng() {
     fi
 
     echo "Installing virtme-ng..."
-    pip3 install virtme-ng
+
+    # On aarch64, we MUST build from source to get the correct virtme-ng-init binary.
+    # The pre-built wheels might be x86_64 only.
+    if [[ "$(uname -m)" == "aarch64" ]]; then
+        echo "Detected aarch64. Ensuring Rust is available for source build..."
+        if ! command -v cargo >/dev/null 2>&1; then
+             echo "Cargo not found. Installing Rust..."
+             sudo apt-get update && sudo apt-get install -y rustc cargo
+        fi
+        
+        echo "Building virtme-ng from source..."
+        pip3 install --no-binary :all: virtme-ng
+    else
+        pip3 install virtme-ng
+    fi
 
     if ! command -v vng >/dev/null 2>&1; then
         echo "Error: vng not found on PATH after installation"
