@@ -44,7 +44,7 @@ install_virtme_ng() {
         pip3 install virtme-ng
 
         # 2. Build the 'virtme-ng-init' binary from source using cargo (native aarch64)
-        sudo apt-get update && sudo apt-get install -y rustc cargo libclang-dev git pkg-config
+        sudo apt-get update && sudo apt-get install -y rustc cargo libclang-dev git pkg-config cpu-checker
         cargo install --git https://github.com/arighi/virtme-ng virtme-ng-init
 
         # 3. Locate and overwrite the broken pip-installed binary with the cargo-built one
@@ -76,6 +76,26 @@ install_virtme_ng() {
         exit 1
     fi
     echo "virtme-ng installed: $(vng --version 2>&1 || true)"
+
+    # Debug KVM status
+    echo "Checking KVM status..."
+    if [[ -e /dev/kvm ]]; then
+        echo "/dev/kvm exists."
+        ls -l /dev/kvm
+        # Ensure current user can access it
+        if [ -w /dev/kvm ]; then
+            echo "Write access to /dev/kvm confirmed."
+        else
+            echo "No write access to /dev/kvm. Attempting fix..."
+            sudo chmod 666 /dev/kvm
+        fi
+    else
+        echo "WARNING: /dev/kvm does NOT exist. This will run in slow emulation mode."
+    fi
+    
+    if command -v kvm-ok >/dev/null 2>&1; then
+        kvm-ok || true
+    fi
 
     # Ensure virtme-ng cache directory exists (fixes QEMU mount error)
     mkdir -p "$HOME/.cache/virtme-ng"
@@ -131,9 +151,20 @@ VNG_ARGS=(
     --cpus 2
 )
 
+# Configure QEMU accelerator and machine type
+if [[ "$(uname -m)" == "aarch64" ]]; then
+    if [[ -e /dev/kvm ]]; then
+       # Force KVM
+       VNG_ARGS+=(--qemu-opts -enable-kvm -machine virt,gic-version=host)
+    else
+       # Software emulation (slow)
+       VNG_ARGS+=(--qemu-opts -machine virt,gic-version=max)
+    fi
+fi
+
 # Native execution (or same-arch emulation) - use host rootfs
 VNG_ARGS+=(--exec "$CMD")
 
 echo "Launching virtme-ng..."
-echo "Running: ${VNG_ARGS[*]}"
-"${VNG_ARGS[@]}"
+# Add a timeout to prevent infinite hangs (e.g. RCU stalls)
+timeout 10m "${VNG_ARGS[@]}"
