@@ -124,12 +124,7 @@
     "ami": "07774797557132122",
     "arch": "aarch64"
   },
-  {
-    "name": "Ubuntu Mainline 6.12 (x86_64)",
-    "type": "mainline",
-    "kernel_version": "v6.12",
-    "arch": "x86_64"
-  },
+
   {
     "name": "Ubuntu Mainline 6.12 (aarch64)",
     "type": "mainline",

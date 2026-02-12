@@ -155,10 +155,10 @@ VNG_ARGS=(
 if [[ "$(uname -m)" == "aarch64" ]]; then
     if [[ -e /dev/kvm ]]; then
        # Force KVM
-       VNG_ARGS+=(--qemu-opts -enable-kvm -machine virt,gic-version=host)
+       VNG_ARGS+=(--qemu-opts "-enable-kvm -machine virt,gic-version=host")
     else
        # Software emulation (slow)
-       VNG_ARGS+=(--qemu-opts -machine virt,gic-version=max)
+       VNG_ARGS+=(--qemu-opts "-machine virt,gic-version=max")
     fi
 fi
 
