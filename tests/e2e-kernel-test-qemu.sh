@@ -37,21 +37,35 @@ install_virtme_ng() {
 
     echo "Installing virtme-ng..."
 
-    # On aarch64, pip installation delivers broken binaries (Exec format error).
-    # We install from source using cargo to ensure native compilation.
     if [[ "$(uname -m)" == "aarch64" ]]; then
-        echo "Detected aarch64. Installing virtme-ng via cargo..."
+        echo "Detected aarch64. Using hybrid install (pip + cargo) to fix binary mismatch..."
         
-        # Install build dependencies
-        sudo apt-get update
-        sudo apt-get install -y rustc cargo libclang-dev git pkg-config
+        # 1. Install via pip to get the 'vng' CLI tool and python structure
+        pip3 install virtme-ng
 
-        # Install from git source
-        # Using a recent tag/commit could be safer, but HEAD should work for now.
-        cargo install --git https://github.com/arighi/virtme-ng
+        # 2. Build the 'virtme-ng-init' binary from source using cargo (native aarch64)
+        sudo apt-get update && sudo apt-get install -y rustc cargo libclang-dev git pkg-config
+        cargo install --git https://github.com/arighi/virtme-ng virtme-ng-init
+
+        # 3. Locate and overwrite the broken pip-installed binary with the cargo-built one
+        PIP_LOCATION=$(pip3 show virtme-ng | grep Location | cut -d' ' -f2)
+        INIT_BINARY="$PIP_LOCATION/virtme/guest/bin/virtme-ng-init"
         
-        # Add cargo bin to PATH
-        export PATH="$HOME/.cargo/bin:$PATH"
+        if [[ -f "$INIT_BINARY" ]]; then
+            echo "Overwriting broken exec with native build: $INIT_BINARY"
+            sudo cp "$HOME/.cargo/bin/virtme-ng-init" "$INIT_BINARY"
+        else
+            echo "Error: Could not locate virtme-ng-init in pip package at $INIT_BINARY"
+            # Try to find it if path is different
+            FOUND_INIT=$(find "$PIP_LOCATION" -name virtme-ng-init -type f | head -n1)
+            if [[ -n "$FOUND_INIT" ]]; then
+                echo "Found init binary at $FOUND_INIT. Overwriting..."
+                sudo cp "$HOME/.cargo/bin/virtme-ng-init" "$FOUND_INIT"
+            else
+                echo "Critical: Failed to find target virtme-ng-init to overwrite."
+                exit 1
+            fi
+        fi
     else
         pip3 install virtme-ng
     fi
