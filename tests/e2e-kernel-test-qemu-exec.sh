@@ -4,7 +4,7 @@
 #
 
 set -u
-# Do NOT use set -e, we want to catch errors and print logs
+# Do NOT use set -e, we want to capture errors and print logs
 
 SCRIPT_TMP_DIR=/tmp
 TRACEE_TMP_DIR=/tmp/tracee
@@ -21,18 +21,19 @@ error() { echo "ERROR: $*"; }
 export HOME="/tmp/root"
 export GOPATH="$(pwd)/.go"
 export GOCACHE="$(pwd)/.go-cache"
+# Force Offline Mode
+export GOPROXY=off
+export GOSUMDB=off
 export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
 
 info "=== DEBUG INFO ==="
 info "User: $(whoami)"
 info "Kernel: $(uname -r)"
 info "Arch: $(uname -m)"
+info "GOPATH: $GOPATH"
+info "GOPATH Contents (top level):"
+ls -F "$GOPATH" || echo "GOPATH empty or inaccessible"
 info "Go: $(go version 2>&1 || echo 'missing')"
-info "Make: $(make --version 2>&1 | head -n1 || echo 'missing')"
-info "GCC: $(gcc --version 2>&1 | head -n1 || echo 'missing')"
-info "Clang: $(clang --version 2>&1 | head -n1 || echo 'missing')"
-info "Kernel Headers: $(ls -d /lib/modules/$(uname -r)/build 2>/dev/null || echo 'missing')"
-info "Dist: $(ls -l ./dist/tracee 2>/dev/null || echo 'missing')"
 
 EXIT_CODE=0
 
@@ -50,7 +51,6 @@ fi
 
 # 2. Instrumentation Test
 info ">>> Running Instrumentation Test..."
-# FORCE KEEP ARTIFACTS
 if ./tests/e2e-inst-test.sh --keep-artifacts > "$ARTIFACTS_DIR/e2e-inst-test.log" 2>&1; then
     info "Instrumentation Test: PASSED"
 else
@@ -58,7 +58,6 @@ else
     info "--- LOGS: e2e-inst-test ---"
     cat "$ARTIFACTS_DIR/e2e-inst-test.log" | tail -n 100
     info "---------------------------"
-    
     # Check for specific suite logs if they exist
     for suite_log in /tmp/test_*_*.log; do
         if [[ -f "$suite_log" ]]; then
@@ -67,7 +66,6 @@ else
             info "---------------------------------------"
         fi
     done
-    
     EXIT_CODE=1
 fi
 
