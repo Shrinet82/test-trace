@@ -416,10 +416,7 @@ jobs:
 
   kernel-tests-mainline:
     name: "Mainline Kernels (${{ matrix.arch }})"
-    runs-on:
-      - ${{ matrix.runner_label }}
-      - EXECUTION_TYPE=SHORT
-      - INSTANCE_TYPE=MEDIUM
+    runs-on: ${{ matrix.runner_label }}
     strategy:
       fail-fast: false
       matrix:
