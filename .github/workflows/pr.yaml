@@ -425,9 +425,9 @@ jobs:
       matrix:
         include:
           - arch: "x86_64"
-            runner_label: "graas_ami-03dbff05cae3a30d0_${{ github.event.number }}${{ github.run_attempt }}-${{ github.run_id }}_${{ github.run_number }}123"
-          - arch: "aarch64"
-            runner_label: "graas_ami-07774797557132122_${{ github.event.number }}${{ github.run_attempt }}-${{ github.run_id }}_${{ github.run_number }}"
+            runner_label: "ubuntu-24.04"
+          # - arch: "aarch64"
+          #   runner_label: "ubuntu-24.04-arm"
     env:
       HOME: "/tmp/root"
       GOPATH: "/tmp/go"
