@@ -19,8 +19,8 @@ error() { echo "ERROR: $*"; }
 
 # Setup Env
 export HOME="/tmp/root"
-export GOPATH="/tmp/go"
-export GOCACHE="/tmp/go-cache"
+export GOPATH="$(pwd)/.go"
+export GOCACHE="$(pwd)/.go-cache"
 export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
 
 info "=== DEBUG INFO ==="

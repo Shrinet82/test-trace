@@ -427,13 +427,13 @@ jobs:
           #   runner_label: "ubuntu-24.04-arm"
     env:
       HOME: "/tmp/root"
-      GOPATH: "/tmp/go"
-      GOCACHE: "/tmp/go-cache"
+      GOPATH: "${{ github.workspace }}/.go"
+      GOCACHE: "${{ github.workspace }}/.go-cache"
       GOROOT: "/usr/local/go"
     steps:
       - name: Prepare Environment
         run: |
-          mkdir -p /tmp/root /tmp/go /tmp/go-cache
+          mkdir -p /tmp/root
 
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
