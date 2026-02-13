@@ -1,42 +1,14 @@
 #
 # When a PR is opened or updated: Run Tracee Tests
 #
-name: PR
+name: Mainline Debug
 on:
   workflow_dispatch:
-    inputs:
-      tracee_ref:
-        description: "Tracee ref to checkout"
-        required: true
-        default: "main"
-        type: string
-
-  pull_request:
+  push:
     branches:
-      - "main"
-      - "release-v*.*"
-    paths:
-      - "!docs/**"
-      - "!deploy/**"
-      - "!packaging/**"
-      - "!**.yaml"
-      - "!**.md"
-      - "!**.txt"
-      - "!**.conf"
-      # override previous rules:
-      - "docs/docs/flags/**"
-      - "docs/man/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - "**.c"
-      - "**.h"
-      - "**.go"
-      - "**.sh"
-      - "**/pr.yaml"
-      - "**/action.yaml"
+      - "feat/mainline-debug"
 concurrency:
-  group: ${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.ref }}
   cancel-in-progress: true
 env:
   TRACEE_REF: ${{ github.event.inputs.tracee_ref || github.ref }}
